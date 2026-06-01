@@ -10,7 +10,7 @@ Authors: Swati Ravi, Herman Marshall
 
 ## Overview
 
-The REDSoX/GOSoX MDP Calculator is a Python tool for estimating the soft X-ray spectropolarimetric performance of the REDSoX and GOSoX mission concepts.
+The REDSoX/GOSoX MDP Calculator is a Python tool for estimating the soft X-ray spectropolarimetric performance of the REDSoX and GOSoX missions.
 
 The code computes:
 
@@ -85,9 +85,7 @@ Install dependencies:
 pip install numpy
 ```
 
-Optional (but highly recommended):
-
-pyXspec For installation instructions, see the
+Optional (but highly recommended): pyXspec For installation instructions, see the
 [official pyXspec documentation](https://heasarc.gsfc.nasa.gov/docs/software/xspec/python/html/).
 
 If pyXspec is unavailable, the code automatically falls back to an approximate interstellar absorption model. 
@@ -343,7 +341,7 @@ The `data/` directory contains:
 
 ## License
 
-Released under the MIT License.
+This is free research software provided as-is for scientific use. You are welcome to redistribute it under certain conditions. Licensed under the MIT License (see LICENSE file for details).
 
 ---
 
@@ -357,7 +355,7 @@ ABSOLUTELY NO WARRANTY is provided.
 
 ## Contact
 
-Swati Ravi
+For questions, please contact
 
 [swatir@mit.edu](mailto:swatir@mit.edu)
 
