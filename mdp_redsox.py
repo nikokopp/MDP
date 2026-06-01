@@ -822,7 +822,7 @@ def parse_args():
 
     subparsers.add_parser(
         "samples",
-        help="Run the built-in benchmark source library."
+        help="Run the built-in benchmark source library.",
         description=(
             "Evaluate the built-in suite of neutron stars, AGN, "
             "blazars, and X-ray binaries."
