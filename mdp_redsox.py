@@ -614,7 +614,7 @@ def run_all_sources(wave, nrg, lam1, lam2, area1_lam_lo, area1_lam_hi, area0_lam
     """
     results = {}
 
-    # RX J1856
+    # RX J1856 (Hohle'12, table 10)
     src_name = "RX J1856"
     nh = 8.0e19
     kT_keV = 0.06228
@@ -628,7 +628,7 @@ def run_all_sources(wave, nrg, lam1, lam2, area1_lam_lo, area1_lam_hi, area0_lam
         exptime, bg, src_name
     )
 
-    # RX J0720
+    # RX J0720 (Hohle'12, table 10)
     src_name = "RX J0720"
     nh = 0.886e20
     kT1_keV = 0.0924
@@ -646,6 +646,7 @@ def run_all_sources(wave, nrg, lam1, lam2, area1_lam_lo, area1_lam_hi, area0_lam
     )
 
     # PSR B0656 (note: IDL label says 1e6 s, but IDL exptime var is set earlier)
+    # (Hohle '12)
     src_name = "PSR B0656, 1e6 s"
     nh = 0.12e20
     kT1_keV = 0.0679
@@ -663,7 +664,7 @@ def run_all_sources(wave, nrg, lam1, lam2, area1_lam_lo, area1_lam_hi, area0_lam
         exptime, bg, src_name
     )
 
-    # Her X-1
+    # Her X-1 (McCray+ '82)
     src_name = "Her X-1"
     norm = 0.0
     slope = 1.5
@@ -712,7 +713,7 @@ def run_all_sources(wave, nrg, lam1, lam2, area1_lam_lo, area1_lam_hi, area0_lam
         exptime, bg, src_name
     )
 
-    # 3C 273
+    # 3C 273 (Marshall, LETGS from 6/02)
     src_name = "3C 273"
     norm1 = 0.00996
     slope1 = 2.30
@@ -731,7 +732,7 @@ def run_all_sources(wave, nrg, lam1, lam2, area1_lam_lo, area1_lam_hi, area0_lam
         exptime, bg, src_name
     )
 
-    # Ark 564
+    # Ark 564 (Ramirez '13, from an LETGS observation)
     src_name = "Ark 564"
     norm1 = 10.0 * 0.001
     slope1 = 2.5
@@ -750,7 +751,7 @@ def run_all_sources(wave, nrg, lam1, lam2, area1_lam_lo, area1_lam_hi, area0_lam
         exptime, bg, src_name
     )
 
-    # Mk 478
+    # Mk 478 (Marshall+)
     src_name = "Mk 478"
     norm1 = 3.3 * 0.001
     slope1 = 3.03
