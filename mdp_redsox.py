@@ -90,7 +90,7 @@ def load_two_cols_forgiving(fname):
             s = line.strip()
             if not s:
                 continue
-            parts = s.split()
+            parts = s.replace(",", " ").split()
             if len(parts) < 2:
                 continue
             try:
