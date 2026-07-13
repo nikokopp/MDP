@@ -136,6 +136,28 @@ def idl_interpol(y, x, xnew):
     y = y[order]
     return np.interp(xnew, x, y, left=y[0], right=y[-1])
 
+def bin_widths_from_centers(x):
+    """
+    Estimate bin widths from bin centers.
+
+    This is needed because redsoxAreaInf.txt is spaced evenly in energy,
+    but after converting to wavelength, the wavelength spacing is not uniform.
+    """
+    x = np.asarray(x, dtype=float)
+
+    if x.ndim != 1 or x.size < 2:
+        raise ValueError("x must be a 1D array with at least two points")
+
+    edges = np.empty(x.size + 1, dtype=float)
+    # make bin edges halfway between points
+    edges[1:-1] = 0.5 * (x[:-1] + x[1:])
+    # make first/last edges halfway outside the first/last points
+    edges[0] = x[0] - 0.5 * (x[1] - x[0])
+    edges[-1] = x[-1] + 0.5 * (x[-1] - x[-2])
+
+    # return width of each bin, used instead of constant dlam
+    return np.abs(np.diff(edges))
+
 def bbspec(wave_angstrom, kT_keV):
     """
     Compute the blackbody photon flux spectrum as a function of wavelength.
@@ -582,6 +604,19 @@ def build_effective_areas(data_dir: Path, wave):
 
     return area1_lam_lo, area1_lam_hi, area0_lam, modfactor_lo, modfactor_hi, geom_area, detqe_filt
 
+def build_zeroth_order_effective_areas(data_dir: Path):
+    """
+    Construct REDSoX zeroth-order effective area array on wider mirror energy grid.
+    """
+
+    mirror_area_file = data_dir / "redsoxAreaInf.txt"
+
+    nrg0, mirror_area0 = load_two_cols_forgiving(mirror_area_file)
+    mirror_area0 = np.asarray(mirror_area0, dtype=float)
+
+    return nrg0, mirror_area0
+
+
 def run_all_sources(wave, nrg, lam1, lam2, area1_lam_lo, area1_lam_hi, area0_lam, modfactor_lo, modfactor_hi, exptime, bg):
     """
     Evaluate REDSoX performance for a set of representative astrophysical sources.
@@ -830,6 +865,13 @@ def parse_args():
         )
     )
 
+    # add parser for testing my edits to code
+    subparsers.add_parser(
+        "testing",
+        help="Testing edits."
+    )
+
+
     custom = subparsers.add_parser(
         "custom",
         help="Evaluate a user-defined source spectrum.",
@@ -1002,6 +1044,20 @@ def main():
 
     bg = getattr(args, "bg", 0.002)
     exptime = getattr(args, "exptime", 300.0)
+
+    if args.mode == "testing":
+        nrg0, mirror_area0 = build_zeroth_order_effective_areas(data_dir)
+
+        print("Loaded redsoxAreaInf.txt")
+        print(f"nrg0 shape: {nrg0.shape}")
+        print(f"mirror_area0 shape: {mirror_area0.shape}")
+        print(f"energy range: {nrg0.min():.3f} to {nrg0.max():.3f} keV")
+        print(f"mirror area range: {mirror_area0.min():.3f} to {mirror_area0.max():.3f} cm^2")
+        print("first 5 rows:")
+        for e, a in zip(nrg0[:5], mirror_area0[:5]):
+            print(f"  {e:.3f} keV   {a:.6f} cm^2")
+
+        return
 
     if args.mode == "samples":
         print("; Running all source blocks from IDL driver...")
