@@ -612,10 +612,72 @@ def build_zeroth_order_effective_areas(data_dir: Path):
     mirror_area_file = data_dir / "redsoxAreaInf.txt"
 
     nrg0, mirror_area0 = load_two_cols_forgiving(mirror_area_file)
+
+    nrg0 = np.asarray(nrg0, dtype=float)
     mirror_area0 = np.asarray(mirror_area0, dtype=float)
 
-    return nrg0, mirror_area0
+    # keep only values that make sense: energy/areas finite, energy nonzero
+    ok = np.isfinite(nrg0) & np.isfinite(mirror_area0) & (nrg0 > 0.0)
+    nrg0 = nrg0[ok]
+    mirror_area0 = mirror_area0[ok]
 
+    # convert energy grid to wavelength grid
+    wave0 = HC_KEV_ANG / nrg0
+
+    # sort by increasing wavelength (originally in decreasing wavelength)
+    order = np.argsort(wave0)
+    wave0 = wave0[order]
+    nrg0 = nrg0[order]
+    mirror_area0 = mirror_area0[order]
+
+    # calculate dlam0
+    dlam0 = bin_widths_from_centers(wave0)
+
+    # define other transmissions/filters/whatever
+    # CAT gratings
+    cat_l1_obscur = 0.78
+    cat_l2_obscur = 0.81
+    cat_obscur = cat_l1_obscur * cat_l2_obscur
+    l3_obscur = 0.83
+
+    # detector QE
+    nrg_kev_qe, qe = load_two_cols_forgiving(data_dir / "ccd097.txt")
+    detqe0 = idl_interpol(qe, nrg_kev_qe, nrg0)
+
+    # OBF transmission
+    nrg_al, trans_al = load_two_cols_forgiving(data_dir / "aluminum_transmission.txt")
+    nrg_poly, trans_poly = load_two_cols_forgiving(data_dir / "polyimide_transmission.txt")
+
+    al_thick_nm = 25.0
+    poly_thick_nm = 45.0
+    al_tau = al_thick_nm / 100.0
+    poly_tau = poly_thick_nm / 100.0
+
+    trans_al_on0 = idl_interpol(trans_al, 0.001 * nrg_al, nrg0)
+    trans_poly_on0 = idl_interpol(trans_poly, 0.001 * nrg_poly, nrg0)
+
+    trans_obf0 = 0.82 * (trans_al_on0 ** al_tau) * (trans_poly_on0 ** poly_tau)
+    detqe_filt0 = trans_obf0 * detqe0
+
+    # zeroth-order CAT grating efficiency
+    wave_eff, theta, eff0, eff1, eff2 = read_eff_tsv(data_dir / "Si_4um_deep_for_MDP.tsv")
+
+    target_theta = 0.7
+    iangle = int(np.argmin(np.abs(theta - target_theta)))
+
+    # reevaluate zeroth-order grating efficiency on new wavelength grid wave0
+    eff0_on0 = idl_interpol(eff0[:, iangle], wave_eff, wave0)
+    eff0_on0 = np.maximum(eff0_on0, 0.0) # ensure positive values
+
+    # redsoxAreaInf.txt replaces old mirror_area * mirror_mount_transmission
+    # so do not multiply by mirror_mount_transmission again here
+    throughput0 = l3_obscur * cat_obscur
+
+    # area0_lam0 includes dlam0, so sum(nlam0 * area0_lam0) gives counts/s
+    area0_lam0 = dlam0 * throughput0 * mirror_area0 * detqe_filt0 * eff0_on0
+    area0_lam0 = np.maximum(area0_lam0, 0.0)
+
+    return wave0, nrg0, area0_lam0, dlam0, mirror_area0, detqe_filt0
 
 def run_all_sources(wave, nrg, lam1, lam2, area1_lam_lo, area1_lam_hi, area0_lam, modfactor_lo, modfactor_hi, exptime, bg):
     """
@@ -1046,18 +1108,69 @@ def main():
     exptime = getattr(args, "exptime", 300.0)
 
     if args.mode == "testing":
-        nrg0, mirror_area0 = build_zeroth_order_effective_areas(data_dir)
+        wave0, nrg0, area0_lam0, dlam0, mirror_area0, detqe_filt0 = \
+            build_zeroth_order_effective_areas(data_dir)
 
-        print("Loaded redsoxAreaInf.txt")
-        print(f"nrg0 shape: {nrg0.shape}")
-        print(f"mirror_area0 shape: {mirror_area0.shape}")
-        print(f"energy range: {nrg0.min():.3f} to {nrg0.max():.3f} keV")
-        print(f"mirror area range: {mirror_area0.min():.3f} to {mirror_area0.max():.3f} cm^2")
-        print("first 5 rows:")
-        for e, a in zip(nrg0[:5], mirror_area0[:5]):
-            print(f"  {e:.3f} keV   {a:.6f} cm^2")
+        ea0_cm2 = area0_lam0 / dlam0
+
+        print("\nLoaded zeroth-order effective area calculation.")
+        print("------------------------------------------------")
+        print(f"Energy range:       {nrg0.min():.6f} to {nrg0.max():.6f} keV")
+        print(f"Wavelength range:   {wave0.min():.6f} to {wave0.max():.6f} Angstrom")
+        print(f"Mirror area range:  {mirror_area0.min():.6e} to {mirror_area0.max():.6e} cm^2")
+        print(f"Final EA0 range:    {ea0_cm2.min():.6e} to {ea0_cm2.max():.6e} cm^2")
+        print(f"Integrated EA0:     {np.sum(area0_lam0):.6e} cm^2 Angstrom")
+
+        # Save diagnostic arrays too, so you can inspect them without plotting.
+        np.savetxt(
+            output_dir / "test_zeroth_order_effective_area.txt",
+            np.column_stack([nrg0, wave0, dlam0, mirror_area0, detqe_filt0, ea0_cm2, area0_lam0]),
+            fmt="%.8e",
+            header="energy_keV wave_A dlam_A mirror_area_cm2 detqe_filt0 EA0_cm2 area0_lam0_cm2_A",
+            comments=""
+        )
+
+        # Make plots and save them to outputs/.
+        import matplotlib.pyplot as plt
+
+        # Sort by increasing energy for nicer energy-axis plots.
+        eorder = np.argsort(nrg0)
+
+        plt.figure()
+        plt.plot(nrg0[eorder], mirror_area0[eorder], color="blue")
+        plt.xlabel("Energy (keV)")
+        plt.ylabel("Mirror effective area (cm$^2$)")
+        plt.title("Input mirror effective area")
+        plt.tight_layout()
+        plt.savefig(output_dir / "test_mirror_area_vs_energy.png", dpi=200)
+        plt.close()
+
+        plt.figure()
+        plt.plot(nrg0[eorder], ea0_cm2[eorder], color="purple")
+        plt.xlabel("Energy (keV)")
+        plt.ylabel("Zeroth-order effective area (cm$^2$)")
+        plt.title("Zeroth-order effective area vs. Energy")
+        plt.tight_layout()
+        plt.savefig(output_dir / "test_zeroth_order_EA_vs_energy.png", dpi=200)
+        plt.close()
+
+        plt.figure()
+        plt.plot(wave0, ea0_cm2, color="deeppink")
+        plt.xlabel("Wavelength (Angstrom)")
+        plt.ylabel("Zeroth-order effective area (cm$^2$)")
+        plt.title("Zeroth-order effective area vs. Wavelength")
+        plt.tight_layout()
+        plt.savefig(output_dir / "test_zeroth_order_EA_vs_wavelength.png", dpi=200)
+        plt.close()
+
+        print("\nWrote diagnostic outputs:")
+        print(f"  {output_dir / 'test_zeroth_order_effective_area.txt'}")
+        print(f"  {output_dir / 'test_mirror_area_vs_energy.png'}")
+        print(f"  {output_dir / 'test_zeroth_order_EA_vs_energy.png'}")
+        print(f"  {output_dir / 'test_zeroth_order_EA_vs_wavelength.png'}")
 
         return
+
 
     if args.mode == "samples":
         print("; Running all source blocks from IDL driver...")
