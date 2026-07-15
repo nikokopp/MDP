@@ -634,7 +634,7 @@ def build_zeroth_order_effective_areas(data_dir: Path):
     dlam0 = bin_widths_from_centers(wave0)
 
     # define other transmissions/filters/whatever
-    # CAT gratings
+    # geometric area scalar
     cat_l1_obscur = 0.78
     cat_l2_obscur = 0.81
     cat_obscur = cat_l1_obscur * cat_l2_obscur
@@ -659,7 +659,7 @@ def build_zeroth_order_effective_areas(data_dir: Path):
     trans_obf0 = 0.82 * (trans_al_on0 ** al_tau) * (trans_poly_on0 ** poly_tau)
     detqe_filt0 = trans_obf0 * detqe0
 
-    # zeroth-order CAT grating efficiency
+    # grating efficiencies and blaze angle selection
     wave_eff, theta, eff0, eff1, eff2 = read_eff_tsv(data_dir / "Si_4um_deep_for_MDP.tsv")
 
     target_theta = 0.7
