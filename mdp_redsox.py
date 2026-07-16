@@ -540,7 +540,29 @@ def read_eff_xlsx(fname: str | Path, sheet_name: str = "Sheet1"):
     wave_indices = np.searchsorted(wave_nm, wave_nm_rows)
     theta_indices = np.searchsorted(theta, theta_rows)
 
-    return
+    efficiency_cube = np.full(
+        (norder, nwave, nangle),
+        np.nan,
+        dtype = float,
+    )
+
+    # efficiency_rows.T has shape (norder, n_file_rows)
+    efficiency_cube[:, wave_indices, theta_indices] = efficiency_rows.T
+
+    if not np.all(np.isfinite(efficiency_cube)):
+        raise ValueError(
+            f"{fname}: one or more grid efficiencies are missing/nonumeric"
+        )
+    
+    # convert nm to Angstrom
+    wave = 10.0 * wave_nm
+
+    eff_by_order = {
+        order : efficiency_cube[k]
+        for k, (order, _) in enumerate(order_columns)
+    }
+
+    return wave, theta, eff_by_order
 
 
 def mdp_redsox(wave, nlam, lam1, lam2, area1_lam_lo, area1_lam_hi, area0_lam, modfactor_lo, modfactor_hi, exptime, bg, src_name):
