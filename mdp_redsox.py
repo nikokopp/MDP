@@ -391,6 +391,158 @@ def read_eff_tsv(fname):
 
     return wave, theta, eff0, eff1, eff2
 
+def read_eff_xlsx(fname: str | Path, sheet_name: str = "Sheet1"):
+    """
+    Read grating efficiency grids from .xlsx file.
+
+    The file contains:
+
+        Column A        : wavelength (nm)
+        Column B        : diffraction angle (deg)
+        Columns C-AJ    : efficiencies for diffraction order +8 to -25
+        Row 4           : diffraction order labels from column C to AJ
+        Row 5+          : efficiency data
+    
+    Parameters
+    ----------
+    fname : str
+        Path to workbook.
+    sheet_name : str, optional
+        For Si_4um_deep_30pct_dc_extended.xlsx, need to use data from "Sheet1".
+    
+    Returns
+    ----------
+    wave : numpy.ndarray
+        Sorted wavelength grid in Angstroms (nwave,)
+    theta : numpy.ndarray
+        Sorted diffraction angle grid in degrees (nangle,)
+    eff_by_order : dict[int, numpy.ndarray]
+        Dictionary mapping each diffraction order to its efficiency array 
+        (eff_by_order[n] carries the nth-order efficiencies).
+        Each array has shape (nwave, nangle).
+
+    Raises
+    ----------
+    ValueError
+        If worksheet is missing, contains duplicate grid points, 
+        has an incomplete wavelength-angle grid, or contains missing efficiencies.
+    """
+
+    fname = Path(fname)
+
+    workbook = load_workbook(
+        filename = fname,
+        read_only = True,
+        data_only = True,
+    )
+
+    try:
+        if sheet_name not in workbook.sheetnames:
+            raise ValueError(
+                f"{fname}: worksheet {sheet_name!r} was not found."
+                f"Available sheets: {workbook.sheetnames}"
+            )
+        
+        worksheet = workbook[sheet_name]
+
+        # row 4 contains diffraction order labels
+        header = next(
+            worksheet.iter_rows(
+                min_row = 4,
+                max_row = 4,
+                values_only = True,
+            )
+        )
+
+        # store (order number, zero-based column index)
+        order_columns = []
+        seen_orders = set()
+
+        for column_index, value in enumerate(header):
+            # columns A and B contain wavelength and angle
+            if column_index > 2 or value is None:
+                continue
+
+            try:
+                numeric_value = float(value)
+            except (TypeError, ValueError):
+                continue
+
+            order = int(round(numeric_value))
+
+            # ignore noninteger columns/labels
+            if not np.isclose(numeric_value, order):
+                continue
+
+            if order in seen_orders:
+                raise ValueError(
+                    f"{fname}: duplicate column for diffraction order {order}"
+                )
+            
+            seen_orders.add(order)
+            order_columns.append((order, column_index))
+
+        wave_nm_rows = []
+        theta_rows = []
+        efficiency_rows = []
+
+        # get numeric data from row 5 and after
+        for row_number, row in enumerate(
+            worksheet.iter_rows(
+                min_row = 5,
+                values_only = True,
+            )
+        ):
+            if not row or all(value is None for value in row):
+                continue
+
+            wave_value = row[0] if len(row) > 0 else None
+            theta_value = row[1] if len(row) > 1 else None
+
+            if wave_value is None and theta_value is None:
+                continue
+
+            if wave_value is None or theta_value is None:
+                raise ValueError(
+                    f"{fname}: incomplete wavelength/angle data on row {row_number}"
+                )
+            
+            # collect efficiencies
+            row_efficiencies = []
+
+            for order, column_index in order_columns:
+                if column_index >= len(row) or row[column_index] is None:
+                    raise ValueError(
+                        f"{fname}: missing efficiency for order {order} on row {row_number}"
+                    )
+                
+                row_efficiencies.append(float(row[column_index]))
+
+            wave_nm_rows.append(float(wave_value))
+            theta_rows.append(float(theta_value))
+            efficiency_rows.append(row_efficiencies)
+
+    finally:
+        workbook.close()
+
+    wave_nm_rows = np.asarray(wave_nm_rows, dtype=float)
+    theta_rows = np.asarray(theta_rows, dtype=float)
+    efficiency_rows = np.asarray(efficiency_rows, dtype=float)
+
+    # np.unique also sorts the axes
+    wave_nm = np.unique(wave_nm_rows)
+    theta = np.unique(theta_rows)
+
+    nwave = wave_nm.size
+    nangle = theta.size
+    norder = len(order_columns)
+
+    wave_indices = np.searchsorted(wave_nm, wave_nm_rows)
+    theta_indices = np.searchsorted(theta, theta_rows)
+
+    return
+
+
 def mdp_redsox(wave, nlam, lam1, lam2, area1_lam_lo, area1_lam_hi, area0_lam, modfactor_lo, modfactor_hi, exptime, bg, src_name):
     """
     Compute REDSoX count rates and minimum detectable polarization (MDP).
