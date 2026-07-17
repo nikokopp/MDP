@@ -27,6 +27,7 @@ import warnings
 import numpy as np
 from pathlib import Path
 import argparse
+from openpyxl import load_workbook
 
 HC_KEV_ANG = 12.3984193       # keV * Angstrom
 CM_PER_PC = 3.0856776e18      # cm
@@ -460,7 +461,7 @@ def read_eff_xlsx(fname: str | Path, sheet_name: str = "Sheet1"):
 
         for column_index, value in enumerate(header):
             # columns A and B contain wavelength and angle
-            if column_index > 2 or value is None:
+            if column_index < 2 or value is None:
                 continue
 
             try:
@@ -813,6 +814,7 @@ def build_zeroth_order_effective_areas(data_dir: Path):
     cat_l2_obscur = 0.81
     cat_obscur = cat_l1_obscur * cat_l2_obscur
     l3_obscur = 0.83
+    mirror_mount_transmission = (1.0 - 0.07) * 0.95
 
     # detector QE
     nrg_kev_qe, qe = load_two_cols_forgiving(data_dir / "ccd097.txt")
@@ -834,18 +836,22 @@ def build_zeroth_order_effective_areas(data_dir: Path):
     detqe_filt0 = trans_obf0 * detqe0
 
     # grating efficiencies and blaze angle selection
-    wave_eff, theta, eff0, eff1, eff2 = read_eff_tsv(data_dir / "Si_4um_deep_for_MDP.tsv")
+    grat_wave, grat_theta, eff_by_order = read_eff_xlsx(data_dir / "Si_4um_deep_30pct_dc_extended.xlsx")
+    eff0 = eff_by_order[0]
 
     target_theta = 0.7
-    iangle = int(np.argmin(np.abs(theta - target_theta)))
+    iangle = int(np.argmin(np.abs(grat_theta - target_theta)))
+    selected_theta = grat_theta[iangle]
 
     # reevaluate zeroth-order grating efficiency on new wavelength grid wave0
-    eff0_on0 = idl_interpol(eff0[:, iangle], wave_eff, wave0)
+    eff0_on0 = idl_interpol(eff0[:, iangle], grat_wave, wave0)
+
+    outside_grating_range = (wave0 < grat_wave.min()) | (wave0 > grat_wave.max())
+    eff0_on0[outside_grating_range] = 0.0 # remove values outside wavelength range
     eff0_on0 = np.maximum(eff0_on0, 0.0) # ensure positive values
 
-    # redsoxAreaInf.txt replaces old mirror_area * mirror_mount_transmission
-    # so do not multiply by mirror_mount_transmission again here
-    throughput0 = l3_obscur * cat_obscur
+    # redsoxAreaInf.txt replaces old mirror_area
+    throughput0 = l3_obscur * cat_obscur * mirror_mount_transmission
 
     # area0_lam0 includes dlam0, so sum(nlam0 * area0_lam0) gives counts/s
     area0_lam0 = dlam0 * throughput0 * mirror_area0 * detqe_filt0 * eff0_on0
