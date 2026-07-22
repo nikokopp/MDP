@@ -939,80 +939,129 @@ def build_zeroth_order_effective_areas(data_dir: Path):
     
     # 5. After detector QE
     effective_area0 = area_after_obf0 * detqe0
+    effective_area0 = np.maximum(effective_area0, 0.0) # positive values only
 
-    # make values positive-only
-    effective_area0 = np.maximum(effective_area0, 0.0)
+    # return zeroth-order EA after each stage
+    ea_stages = {
+        "mirror": area_after_mirror0,
+        "mirror_mount": area_after_mount0,
+        "grating_supports": area_after_supports0,
+        "grating_efficiency": area_after_grating0,
+        "obf": area_after_obf0,
+        "detector_qe": effective_area0,
+    }
 
-    # Binned response used in rate0 = sum(nlam0 * area0_lam0)
-    # cm^2 Angstrom per wavelength bin
-    area0_lam0 = dlam0 * effective_area0
-
-    # ---------------------------------------------------------
-    # Other calculations for return statement
-    # ---------------------------------------------------------
+    # Final bin-integrated zeroth-order response
+    # Units: cm^2 Angstrom per wavelength bin.
+    area0_lam0 = dlam0 * ea_stages["detector_qe"]
 
     detqe_filt0 = trans_obf0 * detqe0
 
-    # ---------------------------------------------------------
-    # Plot zeroth-order effective area stages
-    # ---------------------------------------------------------
+    return (wave0, nrg0, area0_lam0, dlam0, ea_stages, detqe_filt0, selected_theta)
 
-    output_dir = data_dir.parent / "outputs"
-    output_dir.mkdir(parents=True, exist_ok=True)
+def calculate_stage_count_rates(nlam, dlam, ea_stages, mask=None):
+    """
+    Calculate the source count rate at every effective-area stage.
+
+    Parameters
+    ----------
+    nlam : array-like
+        Source photon spectrum (photons cm^-2 s^-1 Angstrom^-1)
+    dlam : array-like or float
+        Wavelength-bin widths (Angstroms)
+    ea_stages : dict[str, numpy.ndarray]
+        Effective-area arrays (cm^2)
+    mask : array-like of bool, optional
+        Wavelength bins to include. If omitted, use the entire grid.
+
+    Returns
+    -------
+    dict[str, float]
+        Integrated count rate at each stage (counts s^-1)
+    """
+    nlam = np.asarray(nlam, dtype=float)
+    dlam = np.asarray(dlam, dtype=float)
+
+    # Allows either an array of bin widths or one scalar bin width
+    dlam = np.broadcast_to(dlam, nlam.shape)
+
+    if mask is None:
+        mask = np.ones(nlam.shape, dtype=bool)
+    else:
+        mask = np.asarray(mask, dtype=bool)
+
+    if mask.shape != nlam.shape:
+        raise ValueError("mask must have the same shape as nlam")
+
+    rates = {}
+
+    for stage_name, effective_area in ea_stages.items():
+        effective_area = np.asarray(effective_area, dtype=float)
+
+        if effective_area.shape != nlam.shape:
+            raise ValueError(
+                f"Stage {stage_name!r} has shape "
+                f"{effective_area.shape}, expected {nlam.shape}"
+            )
+
+        rate_spectrum = nlam * effective_area
+
+        rates[stage_name] = float(np.sum(rate_spectrum[mask] * dlam[mask]))
+
+    return rates
+
+def plot_zeroth_order_effective_area_stages(nrg0, ea_stages, selected_theta, output_path, stage_rates=None, source_name=None):
+    '''
+    Plot cumulative zeroth-order effective area after each stage of telescope.
+    '''
+    nrg0 = np.asarray(nrg0, dtype=float)
 
     # sort by increasing energy
     plot_order = np.argsort(nrg0)
     energy_plot = nrg0[plot_order]
 
-    stages = [
-        (
-            "0. Input mirror effective area",
-            area_after_mirror0,
-        ),
-        (
-            "1. After mirror mount transmission",
-            area_after_mount0,
-        ),
-        (
-            "2. After CAT grating/support obscuration",
-            area_after_supports0,
-        ),
-        (
-            "3. After zeroth-order grating efficiency",
-            area_after_grating0,
-        ),
-        (
-            "4. After OBF",
-            area_after_obf0,
-        ),
-        (
-            "5. After detector QE",
-            effective_area0,
-        ),
-    ]
+    zeroth_order_stage_labels = {
+    "mirror": "0. Input mirror effective area",
+    "mirror_mount": "1. After mirror mount transmission",
+    "grating_supports": "2. After CAT grating/support obscuration",
+    "grating_efficiency": "3. After zeroth-order grating efficiency",
+    "obf": "4. After optical blocking filter",
+    "detector_qe": "5. After detector quantum efficiency",
+}
 
     fig, axes = plt.subplots(
-        nrows=len(stages),
+        nrows=len(ea_stages),
         ncols=1,
         figsize=(9, 13),
         sharex=True,
     )
 
-    common_ymax = 1.05 * np.nanmax(area_after_mirror0)
+    # set y-axis scale to be that of the input zeroth-order mirror effective area
+    common_ymax = 1.05 * np.nanmax(ea_stages["mirror"])
 
-    for ax, (title, area) in zip(axes, stages):
+    for ax, (stage_name, area) in zip(axes, ea_stages.items()):
+        area = np.asarray(area, dtype=float)
         area_plot = area[plot_order]
 
         ax.plot(energy_plot, area_plot, linewidth=1.5)
-        ax.set_title(title, loc="left", fontsize=10)
+        ax.set_title(stage_name, loc="left", fontsize=10)
         ax.set_ylabel(r"EA (cm$^2$)")
         ax.set_ylim(0.0, common_ymax)
         ax.grid(alpha=0.25)
 
+        annotation = (f"max EA = {np.nanmax(area_plot):.3g} cm$^2$")
+
+        if stage_rates is not None:
+            rate = stage_rates[stage_name]
+            name = source_name or "Source"
+            annotation += (
+                f"\n{name} rate = {rate:.4e} count s$^{{-1}}$"
+            )
+
         ax.text(
             0.98,
             0.82,
-            f"max = {np.nanmax(area_plot):.3g} cm$^2$",
+            annotation,
             transform=ax.transAxes,
             ha="right",
             va="top",
@@ -1031,10 +1080,10 @@ def build_zeroth_order_effective_areas(data_dir: Path):
 
     fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.96))
 
-    fig.savefig(output_dir / "zeroth_order_effective_area_stages.png", dpi=200)
+    fig.savefig(output_path, dpi=200)
     plt.close(fig)
 
-    return wave0, nrg0, area0_lam0, dlam0, mirror_area0, detqe_filt0
+    return output_path
 
 def run_all_sources(wave, nrg, lam1, lam2, area1_lam_lo, area1_lam_hi, area0_lam, modfactor_lo, modfactor_hi, exptime, bg):
     """
@@ -1403,6 +1452,44 @@ def make_custom_source_spectrum(wave, nrg, args):
 
     return nlam * ism
 
+def make_mrk421_spectrum(wave, nrg):
+    """
+    Construct the absorbed Mrk 421 photon spectrum.
+
+    Parameters
+    ----------
+    wave : array-like
+        Wavelength grid in Angstroms.
+    nrg : array-like
+        Corresponding energy grid in keV.
+
+    Returns
+    -------
+    numpy.ndarray
+        Absorbed photon flux density in photons cm^-2 s^-1 Angstrom^-1.
+    """
+    wave = np.asarray(wave, dtype=float)
+    nrg = np.asarray(nrg, dtype=float)
+
+    if wave.shape != nrg.shape:
+        raise ValueError("wave and nrg must have the same shape")
+
+    norm = 0.25
+    photon_index = 2.7
+    nh = 1.45e20
+
+    ism = ism_tb(nrg, nh)
+
+    # Photon flux density per unit energy: photons cm^-2 s^-1 keV^-1
+    n_E = norm * nrg**(-photon_index) * ism
+
+    # E = HC / lambda, so |dE/dlambda| = E^2 / HC.
+    # Convert from per keV to per Angstrom.
+    nlam = n_E * nrg**2 / HC_KEV_ANG
+
+    nlam[~np.isfinite(nlam)] = 0.0
+    return np.maximum(nlam, 0.0)
+
 def main():
     """
     Generate REDSoX effective area products and evaluate source performance.
@@ -1465,64 +1552,55 @@ def main():
     exptime = getattr(args, "exptime", 300.0)
 
     if args.mode == "testing":
-        wave0, nrg0, area0_lam0, dlam0, mirror_area0, detqe_filt0 = \
-            build_zeroth_order_effective_areas(data_dir)
+        (
+            wave0,
+            nrg0,
+            area0_lam0,
+            dlam0,
+            ea_stages,
+            detqe_filt0,
+            selected_theta,
+        ) = build_zeroth_order_effective_areas(data_dir)
 
-        ea0_cm2 = area0_lam0 / dlam0
+        ea0_cm2 = ea_stages["detector_qe"]
 
-        print("\nLoaded zeroth-order effective area calculation.")
-        print("------------------------------------------------")
-        print(f"Energy range:       {nrg0.min():.6f} to {nrg0.max():.6f} keV")
-        print(f"Wavelength range:   {wave0.min():.6f} to {wave0.max():.6f} Angstrom")
-        print(f"Mirror area range:  {mirror_area0.min():.6e} to {mirror_area0.max():.6e} cm^2")
-        print(f"Final EA0 range:    {ea0_cm2.min():.6e} to {ea0_cm2.max():.6e} cm^2")
-        print(f"Integrated EA0:     {np.sum(area0_lam0):.6e} cm^2 Angstrom")
+        # Evaluate Mrk 421 on the new zeroth-order wavelength grid.
+        nlam0_mrk421 = make_mrk421_spectrum(wave0, nrg0)
 
-        # Save diagnostic arrays too, so you can inspect them without plotting.
-        np.savetxt(
-            output_dir / "test_zeroth_order_effective_area.txt",
-            np.column_stack([nrg0, wave0, dlam0, mirror_area0, detqe_filt0, ea0_cm2, area0_lam0]),
-            fmt="%.8e",
-            header="energy_keV wave_A dlam_A mirror_area_cm2 detqe_filt0 EA0_cm2 area0_lam0_cm2_A",
-            comments=""
+        # Calculate the integrated count rate after every component.
+        mrk421_stage_rates = calculate_stage_count_rates(
+            nlam=nlam0_mrk421,
+            dlam=dlam0,
+            ea_stages=ea_stages,
         )
 
-        # Make plots and save them to outputs/.
-        # Sort by increasing energy for nicer energy-axis plots.
-        eorder = np.argsort(nrg0)
+        stage_labels = {
+            "mirror": "Input mirror effective area",
+            "mirror_mount": "After mirror mount",
+            "grating_supports": "After grating/support obscuration",
+            "grating_efficiency": "After zeroth-order grating efficiency",
+            "obf": "After optical blocking filter",
+            "detector_qe": "After detector quantum efficiency",
+        }
 
-        plt.figure()
-        plt.plot(nrg0[eorder], mirror_area0[eorder], color="blue")
-        plt.xlabel("Energy (keV)")
-        plt.ylabel("Mirror effective area (cm$^2$)")
-        plt.title("Input mirror effective area")
-        plt.tight_layout()
-        plt.savefig(output_dir / "test_mirror_area_vs_energy.png", dpi=200)
-        plt.close()
+        print("\nMrk 421 zeroth-order count rates")
+        print("--------------------------------")
 
-        plt.figure()
-        plt.plot(nrg0[eorder], ea0_cm2[eorder], color="purple")
-        plt.xlabel("Energy (keV)")
-        plt.ylabel("Zeroth-order effective area (cm$^2$)")
-        plt.title("Zeroth-order effective area vs. Energy")
-        plt.tight_layout()
-        plt.savefig(output_dir / "test_zeroth_order_EA_vs_energy.png", dpi=200)
-        plt.close()
+        for stage_name, rate in mrk421_stage_rates.items():
+            label = stage_labels[stage_name]
+            print(f"{label:<48} {rate:.6e} count/s")
 
-        plt.figure()
-        plt.plot(wave0, ea0_cm2, color="deeppink")
-        plt.xlabel("Wavelength (Angstrom)")
-        plt.ylabel("Zeroth-order effective area (cm$^2$)")
-        plt.title("Zeroth-order effective area vs. Wavelength")
-        plt.tight_layout()
-        plt.savefig(output_dir / "test_zeroth_order_EA_vs_wavelength.png", dpi=200)
-        plt.close()
-
-        print("\nWrote diagnostic outputs:")
-        print(f"  {output_dir / 'test_zeroth_order_effective_area.txt'}")
-        print(f"  {output_dir / 'test_mirror_area_vs_energy.png'}")
-        print(f"  {output_dir / 'test_zeroth_order_EA_vs_energy.png'}")
-        print(f"  {output_dir / 'test_zeroth_order_EA_vs_wavelength.png'}")
+        plot_zeroth_order_effective_area_stages(
+            nrg0=nrg0,
+            ea_stages=ea_stages,
+            selected_theta=selected_theta,
+            output_path=(
+                output_dir /
+                "zeroth_order_effective_area_stages_mrk421.png"
+            ),
+            stage_rates=mrk421_stage_rates,
+            source_name="Mrk 421",
+        )
 
         return
 
