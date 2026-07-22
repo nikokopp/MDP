@@ -1452,44 +1452,6 @@ def make_custom_source_spectrum(wave, nrg, args):
 
     return nlam * ism
 
-def make_mrk421_spectrum(wave, nrg):
-    """
-    Construct the absorbed Mrk 421 photon spectrum.
-
-    Parameters
-    ----------
-    wave : array-like
-        Wavelength grid in Angstroms.
-    nrg : array-like
-        Corresponding energy grid in keV.
-
-    Returns
-    -------
-    numpy.ndarray
-        Absorbed photon flux density in photons cm^-2 s^-1 Angstrom^-1.
-    """
-    wave = np.asarray(wave, dtype=float)
-    nrg = np.asarray(nrg, dtype=float)
-
-    if wave.shape != nrg.shape:
-        raise ValueError("wave and nrg must have the same shape")
-
-    norm = 0.25
-    photon_index = 2.7
-    nh = 1.45e20
-
-    ism = ism_tb(nrg, nh)
-
-    # Photon flux density per unit energy: photons cm^-2 s^-1 keV^-1
-    n_E = norm * nrg**(-photon_index) * ism
-
-    # E = HC / lambda, so |dE/dlambda| = E^2 / HC.
-    # Convert from per keV to per Angstrom.
-    nlam = n_E * nrg**2 / HC_KEV_ANG
-
-    nlam[~np.isfinite(nlam)] = 0.0
-    return np.maximum(nlam, 0.0)
-
 def main():
     """
     Generate REDSoX effective area products and evaluate source performance.
@@ -1562,18 +1524,19 @@ def main():
             selected_theta,
         ) = build_zeroth_order_effective_areas(data_dir)
 
-        ea0_cm2 = ea_stages["detector_qe"]
+        # Mrk 421 spectrum evaluated on the wider zeroth-order grid
+        norm = 0.25
+        slope = 2.7
+        nh = 1.45e20
 
-        # Evaluate Mrk 421 on the new zeroth-order wavelength grid.
-        nlam0_mrk421 = make_mrk421_spectrum(wave0, nrg0)
+        ism0 = ism_tb(nrg0, nh)
 
-        # Calculate the integrated count rate after every component.
-        mrk421_stage_rates = calculate_stage_count_rates(
-            nlam=nlam0_mrk421,
-            dlam=dlam0,
-            ea_stages=ea_stages,
-        )
+        photon_flux_E0 = norm * nrg0**(-slope) * ism0
 
+        nlam0_mrk421 = (nrg0**2 * photon_flux_E0) / HC_KEV_ANG
+
+        mrk421_stage_rates = calculate_stage_count_rates(nlam=nlam0_mrk421, dlam=dlam0, ea_stages=ea_stages)
+        
         stage_labels = {
             "mirror": "Input mirror effective area",
             "mirror_mount": "After mirror mount",
