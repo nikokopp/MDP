@@ -1023,7 +1023,7 @@ def build_zeroth_order_effective_areas(data_dir: Path):
 
     fig.suptitle(
         (
-            "REDSoX Zeroth-Order Effective Area Throughput\n"
+            "REDSoX Zeroth-Order Effective Area Throughput in Stages\n"
             f"CAT blaze angle = {selected_theta:.3f} deg"
         ),
         fontsize=13,
