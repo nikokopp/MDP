@@ -959,7 +959,7 @@ def build_zeroth_order_effective_areas(data_dir: Path):
 
     return (wave0, nrg0, area0_lam0, dlam0, ea_stages, detqe_filt0, selected_theta)
 
-def calculate_stage_count_rates(nlam, dlam, ea_stages, mask=None):
+def calculate_stage_count_rates(nlam, dlam, ea_stages):
     """
     Calculate the source count rate at every effective-area stage.
 
@@ -971,8 +971,6 @@ def calculate_stage_count_rates(nlam, dlam, ea_stages, mask=None):
         Wavelength-bin widths (Angstroms)
     ea_stages : dict[str, numpy.ndarray]
         Effective-area arrays (cm^2)
-    mask : array-like of bool, optional
-        Wavelength bins to include. If omitted, use the entire grid.
 
     Returns
     -------
@@ -984,14 +982,6 @@ def calculate_stage_count_rates(nlam, dlam, ea_stages, mask=None):
 
     # Allows either an array of bin widths or one scalar bin width
     dlam = np.broadcast_to(dlam, nlam.shape)
-
-    if mask is None:
-        mask = np.ones(nlam.shape, dtype=bool)
-    else:
-        mask = np.asarray(mask, dtype=bool)
-
-    if mask.shape != nlam.shape:
-        raise ValueError("mask must have the same shape as nlam")
 
     rates = {}
 
@@ -1006,7 +996,7 @@ def calculate_stage_count_rates(nlam, dlam, ea_stages, mask=None):
 
         rate_spectrum = nlam * effective_area
 
-        rates[stage_name] = float(np.sum(rate_spectrum[mask] * dlam[mask]))
+        rates[stage_name] = float(np.sum(rate_spectrum * dlam))
 
     return rates
 
