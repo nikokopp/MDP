@@ -844,70 +844,70 @@ def build_zeroth_order_effective_areas(data_dir: Path):
     iangle = int(np.argmin(np.abs(grat_theta - target_theta)))
     selected_theta = grat_theta[iangle]
 
-    # plot grating efficiencies because something is wrong
-    base_dir = Path(__file__).resolve().parent
-    data_dir = base_dir / "data"
-    output_dir = base_dir / "outputs"
+    # # plot grating efficiencies because something is wrong
+    # base_dir = Path(__file__).resolve().parent
+    # data_dir = base_dir / "data"
+    # output_dir = base_dir / "outputs"
 
-    grat_energy = HC_KEV_ANG / grat_wave
-    raw_eff0 = eff0[:, iangle]
+    # grat_energy = HC_KEV_ANG / grat_wave
+    # raw_eff0 = eff0[:, iangle]
 
-    eorder_grat = np.argsort(grat_energy)
+    # eorder_grat = np.argsort(grat_energy)
 
-    print(f"Requested angle: {target_theta:.6f} deg")
-    print(f"Selected angle:  {selected_theta:.6f} deg")
-    print(f"Raw eff0 range:  {raw_eff0.min():.6e} to {raw_eff0.max():.6e}")
+    # print(f"Requested angle: {target_theta:.6f} deg")
+    # print(f"Selected angle:  {selected_theta:.6f} deg")
+    # print(f"Raw eff0 range:  {raw_eff0.min():.6e} to {raw_eff0.max():.6e}")
 
-    plt.figure()
-    plt.plot(
-        grat_energy[eorder_grat],
-        raw_eff0[eorder_grat],
-        marker=".",
-    )
-    plt.xlim(1.75, 1.90)
-    plt.xlabel("Energy (keV)")
-    plt.ylabel("Zeroth-order grating efficiency")
-    plt.title(f"Zeroth-order grating efficiency at blaze angle {selected_theta:.3f} deg")
-    plt.tight_layout()
-    plt.savefig(
-        output_dir / "test_grating_eff0.png",
-        dpi=200,
-    )
-    plt.close()
+    # plt.figure()
+    # plt.plot(
+    #     grat_energy[eorder_grat],
+    #     raw_eff0[eorder_grat],
+    #     marker=".",
+    # )
+    # plt.xlim(1.75, 1.90)
+    # plt.xlabel("Energy (keV)")
+    # plt.ylabel("Zeroth-order grating efficiency")
+    # plt.title(f"Zeroth-order grating efficiency at blaze angle {selected_theta:.3f} deg")
+    # plt.tight_layout()
+    # plt.savefig(
+    #     output_dir / "test_grating_eff0.png",
+    #     dpi=200,
+    # )
+    # plt.close()
 
-    total_grating_eff = np.zeros_like(grat_wave)
+    # total_grating_eff = np.zeros_like(grat_wave)
 
-    for diffraction_order, efficiency in grat_eff.items():
-        total_grating_eff += efficiency[:, iangle]
+    # for diffraction_order, efficiency in grat_eff.items():
+    #     total_grating_eff += efficiency[:, iangle]
 
-    print(
-        "Summed-order efficiency range:",
-        total_grating_eff.min(),
-        total_grating_eff.max(),
-    )
+    # print(
+    #     "Summed-order efficiency range:",
+    #     total_grating_eff.min(),
+    #     total_grating_eff.max(),
+    # )
 
-    plt.figure()
-    plt.plot(
-        grat_energy[eorder_grat],
-        raw_eff0[eorder_grat],
-        label="Order 0",
-    )
-    plt.plot(
-        grat_energy[eorder_grat],
-        total_grating_eff[eorder_grat],
-        label="Sum over all orders",
-    )
-    plt.xlim(1.75, 1.90)
-    plt.xlabel("Energy (keV)")
-    plt.ylabel("Grating efficiency")
-    plt.title(f"Total grating efficiencies at blaze angle {selected_theta:.3f} deg")
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(
-        output_dir / "test_grating_efficiencies.png",
-        dpi=200,
-    )
-    plt.close()
+    # plt.figure()
+    # plt.plot(
+    #     grat_energy[eorder_grat],
+    #     raw_eff0[eorder_grat],
+    #     label="Order 0",
+    # )
+    # plt.plot(
+    #     grat_energy[eorder_grat],
+    #     total_grating_eff[eorder_grat],
+    #     label="Sum over all orders",
+    # )
+    # plt.xlim(1.75, 1.90)
+    # plt.xlabel("Energy (keV)")
+    # plt.ylabel("Grating efficiency")
+    # plt.title(f"Total grating efficiencies at blaze angle {selected_theta:.3f} deg")
+    # plt.legend()
+    # plt.tight_layout()
+    # plt.savefig(
+    #     output_dir / "test_grating_efficiencies.png",
+    #     dpi=200,
+    # )
+    # plt.close()
 
     # reevaluate zeroth-order grating efficiency on new wavelength grid wave0
     eff0_on0 = idl_interpol(eff0[:, iangle], grat_wave, wave0)
@@ -916,12 +916,123 @@ def build_zeroth_order_effective_areas(data_dir: Path):
     eff0_on0[outside_grating_range] = 0.0 # remove values outside wavelength range
     eff0_on0 = np.maximum(eff0_on0, 0.0) # ensure positive values
 
-    # redsoxAreaInf.txt replaces old mirror_area
-    throughput0 = l3_obscur * cat_obscur * mirror_mount_transmission
+    # ---------------------------------------------------------
+    # Zeroth-order effective area calculation at each stage
+    # mirror --> mirror mount --> grating supports --> zeroth-order grating efficiency --> OBF --> detector QE
+    # These arrays all have units of cm^2.
+    # ---------------------------------------------------------
 
-    # area0_lam0 includes dlam0, so sum(nlam0 * area0_lam0) gives counts/s
-    area0_lam0 = dlam0 * throughput0 * mirror_area0 * detqe_filt0 * eff0_on0
-    area0_lam0 = np.maximum(area0_lam0, 0.0)
+    # 0. Input mirror effective area
+    area_after_mirror0 = np.maximum(mirror_area0, 0.0)
+
+    # 1. After transmission through the mirror mounting structure
+    area_after_mount0 = area_after_mirror0 * mirror_mount_transmission
+
+    # 2. After CAT grating/support obscuration
+    area_after_supports0 = area_after_mount0 * cat_l1_obscur * cat_l2_obscur * l3_obscur
+
+    # 3. After zeroth-order CAT grating efficiency
+    area_after_grating0 = area_after_supports0 * eff0_on0
+
+    # 4. After OBF transmission
+    area_after_obf0 = area_after_grating0 * trans_obf0
+    
+    # 5. After detector QE
+    effective_area0 = area_after_obf0 * detqe0
+
+    # make values positive-only
+    effective_area0 = np.maximum(effective_area0, 0.0)
+
+    # Binned response used in rate0 = sum(nlam0 * area0_lam0)
+    # cm^2 Angstrom per wavelength bin
+    area0_lam0 = dlam0 * effective_area0
+
+    # ---------------------------------------------------------
+    # Other calculations for return statement
+    # ---------------------------------------------------------
+
+    detqe_filt0 = trans_obf0 * detqe0
+
+    # ---------------------------------------------------------
+    # Plot zeroth-order effective area stages
+    # ---------------------------------------------------------
+
+    output_dir = data_dir.parent / "outputs"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # sort by increasing energy
+    plot_order = np.argsort(nrg0)
+    energy_plot = nrg0[plot_order]
+
+    stages = [
+        (
+            "0. Input mirror effective area",
+            area_after_mirror0,
+        ),
+        (
+            "1. After mirror mount transmission",
+            area_after_mount0,
+        ),
+        (
+            "2. After CAT grating/support obscuration",
+            area_after_supports0,
+        ),
+        (
+            "3. After zeroth-order grating efficiency",
+            area_after_grating0,
+        ),
+        (
+            "4. After OBF",
+            area_after_obf0,
+        ),
+        (
+            "5. After detector QE",
+            effective_area0,
+        ),
+    ]
+
+    fig, axes = plt.subplots(
+        nrows=len(stages),
+        ncols=1,
+        figsize=(9, 13),
+        sharex=True,
+    )
+
+    common_ymax = 1.05 * np.nanmax(area_after_mirror0)
+
+    for ax, (title, area) in zip(axes, stages):
+        area_plot = area[plot_order]
+
+        ax.plot(energy_plot, area_plot, linewidth=1.5)
+        ax.set_title(title, loc="left", fontsize=10)
+        ax.set_ylabel(r"EA (cm$^2$)")
+        ax.set_ylim(0.0, common_ymax)
+        ax.grid(alpha=0.25)
+
+        ax.text(
+            0.98,
+            0.82,
+            f"max = {np.nanmax(area_plot):.3g} cm$^2$",
+            transform=ax.transAxes,
+            ha="right",
+            va="top",
+            fontsize=9,
+        )
+
+    axes[-1].set_xlabel("Energy (keV)")
+
+    fig.suptitle(
+        (
+            "REDSoX Zeroth-Order Effective Area Throughput\n"
+            f"CAT blaze angle = {selected_theta:.3f} deg"
+        ),
+        fontsize=13,
+    )
+
+    fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.96))
+
+    fig.savefig(output_dir / "zeroth_order_effective_area_stages.png", dpi=200)
+    plt.close(fig)
 
     return wave0, nrg0, area0_lam0, dlam0, mirror_area0, detqe_filt0
 
