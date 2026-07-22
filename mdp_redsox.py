@@ -1554,19 +1554,15 @@ def main():
             print(f"{label:<48} {rate:.6e} count/s")
 
         plot_zeroth_order_effective_area_stages(
-            nrg0=nrg0,
-            ea_stages=ea_stages,
-            selected_theta=selected_theta,
-            output_path=(
-                output_dir /
-                "zeroth_order_effective_area_stages_mrk421.png"
-            ),
-            stage_rates=mrk421_stage_rates,
-            source_name="Mrk 421",
+            nrg0 = nrg0,
+            ea_stages = ea_stages,
+            selected_theta = selected_theta,
+            output_path = output_dir / "zeroth_order_effective_area_stages_mrk421.png",
+            stage_rates = mrk421_stage_rates,
+            source_name = "Mrk 421",
         )
 
         return
-
 
     if args.mode == "samples":
         print("; Running all source blocks from IDL driver...")
