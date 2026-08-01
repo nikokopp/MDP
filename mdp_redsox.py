@@ -844,70 +844,70 @@ def build_zeroth_order_effective_areas(data_dir: Path):
     iangle = int(np.argmin(np.abs(grat_theta - target_theta)))
     selected_theta = grat_theta[iangle]
 
-    # # plot grating efficiencies because something is wrong
-    # base_dir = Path(__file__).resolve().parent
-    # data_dir = base_dir / "data"
-    # output_dir = base_dir / "outputs"
+    # plot grating efficiencies because something is wrong
+    base_dir = Path(__file__).resolve().parent
+    data_dir = base_dir / "data"
+    output_dir = base_dir / "outputs"
 
-    # grat_energy = HC_KEV_ANG / grat_wave
-    # raw_eff0 = eff0[:, iangle]
+    grat_energy = HC_KEV_ANG / grat_wave
+    raw_eff0 = eff0[:, iangle]
 
-    # eorder_grat = np.argsort(grat_energy)
+    eorder_grat = np.argsort(grat_energy)
 
-    # print(f"Requested angle: {target_theta:.6f} deg")
-    # print(f"Selected angle:  {selected_theta:.6f} deg")
-    # print(f"Raw eff0 range:  {raw_eff0.min():.6e} to {raw_eff0.max():.6e}")
+    print(f"Requested angle: {target_theta:.6f} deg")
+    print(f"Selected angle:  {selected_theta:.6f} deg")
+    print(f"Raw eff0 range:  {raw_eff0.min():.6e} to {raw_eff0.max():.6e}")
 
-    # plt.figure()
-    # plt.plot(
-    #     grat_energy[eorder_grat],
-    #     raw_eff0[eorder_grat],
-    #     marker=".",
-    # )
+    plt.figure()
+    plt.plot(
+        grat_energy[eorder_grat],
+        raw_eff0[eorder_grat],
+        marker=".",
+    )
+    plt.xlim(1.75, 1.90)
+    plt.xlabel("Energy (keV)")
+    plt.ylabel("Zeroth-order grating efficiency")
+    plt.title(f"Zeroth-order grating efficiency at blaze angle {selected_theta:.3f} deg")
+    plt.tight_layout()
+    plt.savefig(
+        output_dir / "test_grating_eff0.png",
+        dpi=200,
+    )
+    plt.close()
+
+    total_grating_eff = np.zeros_like(grat_wave)
+
+    for diffraction_order, efficiency in grat_eff.items():
+        total_grating_eff += efficiency[:, iangle]
+
+    print(
+        "Summed-order efficiency range:",
+        total_grating_eff.min(),
+        total_grating_eff.max(),
+    )
+
+    plt.figure()
+    plt.plot(
+        grat_energy[eorder_grat],
+        raw_eff0[eorder_grat],
+        label="Order 0",
+    )
+    plt.plot(
+        grat_energy[eorder_grat],
+        total_grating_eff[eorder_grat],
+        label="Sum over all orders",
+    )
     # plt.xlim(1.75, 1.90)
-    # plt.xlabel("Energy (keV)")
-    # plt.ylabel("Zeroth-order grating efficiency")
-    # plt.title(f"Zeroth-order grating efficiency at blaze angle {selected_theta:.3f} deg")
-    # plt.tight_layout()
-    # plt.savefig(
-    #     output_dir / "test_grating_eff0.png",
-    #     dpi=200,
-    # )
-    # plt.close()
-
-    # total_grating_eff = np.zeros_like(grat_wave)
-
-    # for diffraction_order, efficiency in grat_eff.items():
-    #     total_grating_eff += efficiency[:, iangle]
-
-    # print(
-    #     "Summed-order efficiency range:",
-    #     total_grating_eff.min(),
-    #     total_grating_eff.max(),
-    # )
-
-    # plt.figure()
-    # plt.plot(
-    #     grat_energy[eorder_grat],
-    #     raw_eff0[eorder_grat],
-    #     label="Order 0",
-    # )
-    # plt.plot(
-    #     grat_energy[eorder_grat],
-    #     total_grating_eff[eorder_grat],
-    #     label="Sum over all orders",
-    # )
-    # plt.xlim(1.75, 1.90)
-    # plt.xlabel("Energy (keV)")
-    # plt.ylabel("Grating efficiency")
-    # plt.title(f"Total grating efficiencies at blaze angle {selected_theta:.3f} deg")
-    # plt.legend()
-    # plt.tight_layout()
-    # plt.savefig(
-    #     output_dir / "test_grating_efficiencies.png",
-    #     dpi=200,
-    # )
-    # plt.close()
+    plt.xlabel("Energy (keV)")
+    plt.ylabel("Grating efficiency")
+    plt.title(f"Total grating efficiencies at blaze angle {selected_theta:.3f} deg")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(
+        output_dir / "test_grating_efficiencies.png",
+        dpi=200,
+    )
+    plt.close()
 
     # reevaluate zeroth-order grating efficiency on new wavelength grid wave0
     eff0_on0 = idl_interpol(eff0[:, iangle], grat_wave, wave0)
