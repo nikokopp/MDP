@@ -844,71 +844,6 @@ def build_zeroth_order_effective_areas(data_dir: Path):
     iangle = int(np.argmin(np.abs(grat_theta - target_theta)))
     selected_theta = grat_theta[iangle]
 
-    # plot grating efficiencies because something is wrong
-    base_dir = Path(__file__).resolve().parent
-    data_dir = base_dir / "data"
-    output_dir = base_dir / "outputs"
-
-    grat_energy = HC_KEV_ANG / grat_wave
-    raw_eff0 = eff0[:, iangle]
-
-    eorder_grat = np.argsort(grat_energy)
-
-    print(f"Requested angle: {target_theta:.6f} deg")
-    print(f"Selected angle:  {selected_theta:.6f} deg")
-    print(f"Raw eff0 range:  {raw_eff0.min():.6e} to {raw_eff0.max():.6e}")
-
-    plt.figure()
-    plt.plot(
-        grat_energy[eorder_grat],
-        raw_eff0[eorder_grat],
-        marker=".",
-    )
-    plt.xlim(1.75, 1.90)
-    plt.xlabel("Energy (keV)")
-    plt.ylabel("Zeroth-order grating efficiency")
-    plt.title(f"Zeroth-order grating efficiency at blaze angle {selected_theta:.3f} deg")
-    plt.tight_layout()
-    plt.savefig(
-        output_dir / "test_grating_eff0.png",
-        dpi=200,
-    )
-    plt.close()
-
-    total_grating_eff = np.zeros_like(grat_wave)
-
-    for diffraction_order, efficiency in grat_eff.items():
-        total_grating_eff += efficiency[:, iangle]
-
-    print(
-        "Summed-order efficiency range:",
-        total_grating_eff.min(),
-        total_grating_eff.max(),
-    )
-
-    plt.figure()
-    plt.plot(
-        grat_energy[eorder_grat],
-        raw_eff0[eorder_grat],
-        label="Order 0",
-    )
-    plt.plot(
-        grat_energy[eorder_grat],
-        total_grating_eff[eorder_grat],
-        label="Sum over all orders",
-    )
-    # plt.xlim(1.75, 1.90)
-    plt.xlabel("Energy (keV)")
-    plt.ylabel("Grating efficiency")
-    plt.title(f"Total grating efficiencies at blaze angle {selected_theta:.3f} deg")
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(
-        output_dir / "test_grating_efficiencies.png",
-        dpi=200,
-    )
-    plt.close()
-
     # reevaluate zeroth-order grating efficiency on new wavelength grid wave0
     eff0_on0 = idl_interpol(eff0[:, iangle], grat_wave, wave0)
 
@@ -1012,19 +947,22 @@ def plot_zeroth_order_effective_area_stages(nrg0, ea_stages, selected_theta, out
 
     zeroth_order_stage_labels = {
     "mirror": "0. Input mirror effective area",
-    "mirror_mount": "1. After mirror mount transmission",
-    "grating_supports": "2. After CAT grating/support obscuration",
-    "grating_efficiency": "3. After zeroth-order grating efficiency",
-    "obf": "4. After optical blocking filter",
-    "detector_qe": "5. After detector quantum efficiency",
+    "mirror_mount": "1. Mirror mount",
+    "grating_supports": "2. CAT grating supports",
+    "grating_efficiency": "3. Zeroth-order grating efficiency",
+    "obf": "4. Optical blocking filter",
+    "detector_qe": "5. Detector QE",
 }
 
     fig, axes = plt.subplots(
-        nrows=len(ea_stages),
-        ncols=1,
-        figsize=(9, 13),
+        nrows=2,
+        ncols=3,
+        figsize=(13, 7),
         sharex=True,
+        sharey=True
     )
+
+    axes = axes.flatten()
 
     # set y-axis scale to be that of the input zeroth-order mirror effective area
     common_ymax = 1.05 * np.nanmax(ea_stages["mirror"])
@@ -1034,7 +972,7 @@ def plot_zeroth_order_effective_area_stages(nrg0, ea_stages, selected_theta, out
         area_plot = area[plot_order]
 
         ax.plot(energy_plot, area_plot, linewidth=1.5)
-        ax.set_title(stage_name, loc="left", fontsize=10)
+        ax.set_title(zeroth_order_stage_labels[stage_name], loc="left", fontsize=10)
         ax.set_ylabel(r"EA (cm$^2$)")
         ax.set_ylim(0.0, common_ymax)
         ax.grid(alpha=0.25)
@@ -1045,20 +983,21 @@ def plot_zeroth_order_effective_area_stages(nrg0, ea_stages, selected_theta, out
             rate = stage_rates[stage_name]
             name = source_name or "Source"
             annotation += (
-                f"\n{name} rate = {rate:.4e} count s$^{{-1}}$"
+                f"\n{name} count rate = {rate:.2g} count s$^{{-1}}$"
             )
 
         ax.text(
-            0.98,
-            0.82,
+            0.97,
+            0.93,
             annotation,
             transform=ax.transAxes,
             ha="right",
             va="top",
-            fontsize=9,
+            fontsize=8,
         )
 
-    axes[-1].set_xlabel("Energy (keV)")
+    fig.supxlabel("Energy (keV)", fontsize=11)
+    fig.supylabel(r"Effective Area (cm$^2$)", fontsize=11)
 
     fig.suptitle(
         (
@@ -1068,9 +1007,9 @@ def plot_zeroth_order_effective_area_stages(nrg0, ea_stages, selected_theta, out
         fontsize=13,
     )
 
-    fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.96))
+    fig.tight_layout(rect=(0.01, 0.01, 1.0, 0.95))
 
-    fig.savefig(output_path, dpi=200)
+    fig.savefig(output_path, dpi=200, bbox_inches="tight")
     plt.close(fig)
 
     return output_path
