@@ -345,10 +345,10 @@ def plot_mrk421_source_spectrum(energy, photon_flux_E, norm, gamma, nh, output_p
     ax.set_title("Mrk 421 Absorbed Source Spectrum")
 
     equation = (
-        r"$N_E(E)=K E^{-\Gamma} T_{\rm ISM}(E)$"
+        r"$N_E(E)=K E^{-\Gamma}T_{\rm ISM}(E)$"
         "\n"
-        + rf"$K={norm:g},\ \Gamma={gamma:g},\ N_H={nh:.2e}\ "
-        + r"\mathrm{cm}^{-2}$"
+        r"$K=0.25,\quad \Gamma=2.7,\quad "
+        r"N_H=1.45\times10^{20}\ {\rm cm}^{-2}$"
     )
 
     ax.text(
@@ -444,7 +444,7 @@ def plot_stage_count_rate_bars(stage_rates, output_path):
         ax.text(
             bar.get_x() + bar.get_width() / 2.0,
             bar.get_height(),
-            f"{rate:.2g}\n({percent:.1f}%)",
+            f"{rate:.0f}\n({percent:.1f}%)",
             ha="center",
             va="bottom",
             fontsize=9,
