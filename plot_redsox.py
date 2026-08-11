@@ -447,7 +447,8 @@ def plot_stage_count_rate_bars(stage_rates, output_path):
             f"{rate:.0f}\n({percent:.1f}%)",
             ha="center",
             va="bottom",
-            fontsize=9,
+            fontsize=14,
+            fontweight="bold"
         )
 
     fig.tight_layout()
