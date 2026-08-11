@@ -491,7 +491,7 @@ def plot_effective_area_stages(
         area_plot = area[plot_order]
 
         ax.plot(energy_plot, area_plot, linewidth=1.5)
-        ax.set_title(stage_labels[stage_name], loc="left", fontsize=10)
+        ax.set_title(stage_labels[stage_name], loc="left", fontsize=13)
         ax.set_ylim(0.0, common_ymax)
         ax.grid(alpha=0.25)
 
@@ -512,16 +512,16 @@ def plot_effective_area_stages(
             fontsize=8,
         )
 
-    fig.supxlabel("Energy (keV)", fontsize=11)
-    fig.supylabel(r"Effective area (cm$^2$)", fontsize=11)
+    fig.supxlabel("Energy (keV)", fontsize=12)
+    fig.supylabel(r"Effective area (cm$^2$)", fontsize=12)
 
     fig.suptitle(
         "REDSoX Zeroth-Order Effective Area Throughput\n"
         f"CAT blaze angle = {selected_theta:.3f} deg",
-        fontsize=13,
+        fontsize=15,
     )
 
-    fig.tight_layout(rect=(0.02, 0.02, 1.0, 0.94))
+    fig.tight_layout(rect=(0.01, 0.01, 1.0, 0.98))
     save_figure(fig, output_path)
 
 
