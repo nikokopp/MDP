@@ -73,7 +73,7 @@ def build_old_zeroth_order_model(data_dir):
     The legacy build_effective_areas() function in mdp_redsox.py still uses:
       - the constant mirror-area prescription
       - Si_4um_deep_for_MDP.tsv
-      - the original 32--64 Angstrom wavelength grid
+      - the original 32-64 Angstrom wavelength grid
 
     area0_lam returned by build_effective_areas() already contains dlam, so
     divide by dlam to recover A_eff in cm^2.
@@ -192,7 +192,7 @@ def plot_old_over_new_ratio(energy_old, aeff_old, energy_new, aeff_new, output_p
 
 
 def plot_final_ea_with_polarimetry_band(energy, aeff, output_path):
-    """Plot final updated zeroth-order EA and highlight 0.2--0.4 keV."""
+    """Plot final updated zeroth-order EA and highlight 0.2-0.4 keV."""
     energy, aeff = sorted_xy(energy, aeff)
 
     fig, ax = plt.subplots(figsize=(9, 5.5))
@@ -202,7 +202,7 @@ def plot_final_ea_with_polarimetry_band(energy, aeff, output_path):
         0.2,
         0.4,
         alpha=0.15,
-        label="Polarimetry band: 0.2--0.4 keV",
+        label="Polarimetry band: 0.2-0.4 keV",
     )
 
     ax.set_xlabel("Energy (keV)")
@@ -380,7 +380,7 @@ def plot_mrk421_count_rate_spectrum(energy, photon_flux_E, aeff, output_path):
     fig, ax = plt.subplots(figsize=(9, 5.5))
 
     ax.plot(energy, dR_dE, linewidth=2.0)
-    ax.axvspan(0.2, 0.4, alpha=0.15, label="Polarimetry band: 0.2--0.4 keV")
+    ax.axvspan(0.2, 0.4, alpha=0.15, label="Polarimetry band: 0.2-0.4 keV")
 
     ax.set_xlabel("Energy (keV)")
     ax.set_ylabel(r"$dR/dE$ (count s$^{-1}$ keV$^{-1}$)")
@@ -595,7 +595,7 @@ def run_testing_figures():
         grating_theta,
         output_dir / "05_grating_efficiencies_zoom_1p7_1p9_keV.png",
         xlim=(1.7, 1.9),
-        title_suffix=" -- 1.7--1.9 keV Zoom",
+        title_suffix="1.7-1.9 keV Zoom",
     )
 
     photon_flux_E, norm, gamma, nh = build_mrk421_spectrum(energy_new)
