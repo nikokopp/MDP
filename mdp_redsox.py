@@ -792,6 +792,15 @@ def build_zeroth_order_effective_areas(data_dir: Path):
     nrg0 = np.asarray(nrg0, dtype=float)
     mirror_area0 = np.asarray(mirror_area0, dtype=float)
 
+    # extend mirror area file down to 0.2 keV using value from 0.3 keV
+    extension_energy = np.arange(0.20, 0.30, 0.01)
+
+    lowest_energy_index = np.argmin(nrg0)
+    extension_area = np.full(extension_energy.shape, mirror_area0[lowest_energy_index])
+
+    nrg0 = np.concatenate([extension_energy, nrg0])
+    mirror_area0 = np.concatenate([extension_area, mirror_area0])
+
     # keep only values that make sense: energy/areas finite, energy nonzero
     ok = np.isfinite(nrg0) & np.isfinite(mirror_area0) & (nrg0 > 0.0)
     nrg0 = nrg0[ok]
