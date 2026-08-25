@@ -148,7 +148,7 @@ def plot_old_vs_new_ea(energy_old, aeff_old, energy_new, aeff_new, output_path):
 
     fig, ax = plt.subplots(figsize=(9, 5.5))
 
-    ax.plot(energy, old, linewidth=2.0, label="Old model")
+    ax.plot(energy, old, linewidth=2.0, label="Old model", color="orange")
     ax.plot(energy, new, linewidth=2.0, label="Updated model")
 
     ax.set_xlabel("Energy (keV)")
