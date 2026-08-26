@@ -29,6 +29,7 @@ from pathlib import Path
 import argparse
 from openpyxl import load_workbook
 import matplotlib.pyplot as plt
+import xspec
 
 HC_KEV_ANG = 12.3984193       # keV * Angstrom
 CM_PER_PC = 3.0856776e18      # cm
@@ -1390,6 +1391,15 @@ def make_custom_source_spectrum(wave, nrg, args):
 
     return nlam * ism
 
+def make_xspec_model(name):
+    model = xspec.Model(name)
+    print(f'Created model: {name}')
+    print("num of parameters:", model.nParameters)
+    for i in range(1, model.nParameters + 1):
+        print(i, model(i).name, model(i).values)
+
+    return model
+
 def main():
     """
     Generate REDSoX effective area products and evaluate source performance.
@@ -1467,39 +1477,10 @@ def main():
         slope = 2.7
         nh = 1.45e20
 
-        ism0 = ism_tb(nrg0, nh)
-
-        photon_flux_E0 = norm * nrg0**(-slope) * ism0
-
-        nlam0_mrk421 = (nrg0**2 * photon_flux_E0) / HC_KEV_ANG
-
-        mrk421_stage_rates = calculate_stage_count_rates(nlam=nlam0_mrk421, dlam=dlam0, ea_stages=ea_stages)
-        
-        stage_labels = {
-            "mirror": "Input mirror effective area",
-            "mirror_mount": "After mirror mount",
-            "grating_supports": "After grating/support obscuration",
-            "grating_efficiency": "After zeroth-order grating efficiency",
-            "obf": "After optical blocking filter",
-            "detector_qe": "After detector quantum efficiency",
-        }
-
-        print("\nMrk 421 zeroth-order count rates")
-        print("--------------------------------")
-
-        for stage_name, rate in mrk421_stage_rates.items():
-            label = stage_labels[stage_name]
-            print(f"{label:<48} {rate:.6e} count/s")
-
-        plot_zeroth_order_effective_area_stages(
-            nrg0 = nrg0,
-            ea_stages = ea_stages,
-            selected_theta = selected_theta,
-            output_path = output_dir / "zeroth_order_effective_area_stages_mrk421.png",
-            stage_rates = mrk421_stage_rates,
-            source_name = "Mrk 421",
-        )
-
+        make_xspec_model("powerlaw")
+        make_xspec_model("tbabs*powerlaw")
+        make_xspec_model("tbabs*(diskbb+powerlaw)")
+            
         return
 
     if args.mode == "samples":
