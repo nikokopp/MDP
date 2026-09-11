@@ -30,6 +30,7 @@ import argparse
 from openpyxl import load_workbook
 import matplotlib.pyplot as plt
 import xspec
+import tempfile
 
 HC_KEV_ANG = 12.3984193       # keV * Angstrom
 CM_PER_PC = 3.0856776e18      # cm
@@ -139,12 +140,12 @@ def idl_interpol(y, x, xnew):
     y = y[order]
     return np.interp(xnew, x, y, left=y[0], right=y[-1])
 
-def bin_widths_from_centers(x):
+def bin_edges_from_centers(x):
     """
-    Estimate bin widths from bin centers.
+    Estimate bin edges from bin centers.
 
-    This is needed because redsoxAreaInf.txt is spaced evenly in energy,
-    but after converting to wavelength, the wavelength spacing is not uniform.
+    This is needed because XSPEC evaluates a source spectrum model over 
+    energy bins defined by edges.
     """
     x = np.asarray(x, dtype=float)
 
@@ -157,6 +158,17 @@ def bin_widths_from_centers(x):
     # make first/last edges halfway outside the first/last points
     edges[0] = x[0] - 0.5 * (x[1] - x[0])
     edges[-1] = x[-1] + 0.5 * (x[-1] - x[-2])
+
+    return edges
+
+def bin_widths_from_centers(x):
+    """
+    Estimate bin widths from bin centers.
+
+    This is needed because redsoxAreaInf.txt is spaced evenly in energy,
+    but after converting to wavelength, the wavelength spacing is not uniform.
+    """
+    edges = bin_edges_from_centers(x)
 
     # return width of each bin, used instead of constant dlam
     return np.abs(np.diff(edges))
@@ -1391,14 +1403,74 @@ def make_custom_source_spectrum(wave, nrg, args):
 
     return nlam * ism
 
-def make_xspec_model(name):
-    model = xspec.Model(name)
-    print(f'Created model: {name}')
-    print("num of parameters:", model.nParameters)
-    for i in range(1, model.nParameters + 1):
-        print(i, model(i).name, model(i).values)
+def make_xspec_model(name, pars, wave):
+    '''
+    Construct an XSPEC source spectrum on the supplied wavelength grid.
 
-    return model
+    Parameters
+    ----------
+    name : str
+        XSPEC model name
+    pars : sequence of floats
+        XSPEC model parameters in correct order
+    wave : array-like
+        Wavelength bin centers in Angstroms
+
+    Returns
+    ---------
+    numpy.ndarray
+        Photon flux density in photons cm^-2 s^-1 Angstrom^-1
+    '''
+    # incorrect wavelength grid size or not in increasing order
+    if wave.ndim != 1 or wave.size < 2:
+        raise ValueError("wavelength grid must be a 1D array with at least two points")
+
+    if not np.all(np.diff(wave) > 0):
+        raise ValueError("wavelength grid must be in increasing order")
+
+    # ---------- #
+
+    # XSPEC uses bin edges, so get them from wavelength grid and convert to energy
+    wave_edges = bin_edges_from_centers(wave)
+    energy_edges = HC_KEV_ANG / wave_edges
+    energy_edges = energy_edges[::-1] # increasing order
+
+    # make custom energy grid
+    # setEnergies function requires ASCII file for an arbitrary non-uniform energy grid
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        energy_grid_file = f.name
+        np.savetxt(f, energy_edges, fmt="%12e")
+
+    try:
+        # remove previous XSPEC models
+        xspec.AllModels.clear()
+
+        # use energy bins given
+        xspec.AllModels.setEnergies(energy_grid_file)
+
+        # define model
+        model = xspec.Model(name)
+        model.setPars(*pars)
+
+        print(f'Created model: {name}')
+        print("num of parameters:", model.nParameters)
+
+        for i in range(1, model.nParameters + 1):
+            print(i, model(i).name, model(i).values)
+
+        # get photon flux
+        # values(0) gives photon flux integrated over each energy bin
+        # photons cm^-2 s^-1
+        bin_flux = np.asarray(model.values(0), dtype=float)
+
+    finally:
+            Path(energy_grid_file).unlink(missing_ok=True)
+
+    bin_flux = bin_flux[::-1] # increasing wavelength order
+    dlam = np.diff(wave_edges)
+    nlam = bin_flux / dlam # flux density -> flux density/Angstrom
+
+    return nlam
 
 def main():
     """
@@ -1471,17 +1543,41 @@ def main():
             detqe_filt0,
             selected_theta,
         ) = build_zeroth_order_effective_areas(data_dir)
-
-        # Mrk 421 spectrum evaluated on the wider zeroth-order grid
+                
+        # make testing args
+        nh = 1.45e20
         norm = 0.25
         slope = 2.7
-        nh = 1.45e20
 
-        make_xspec_model("powerlaw")
-        make_xspec_model("tbabs*powerlaw")
-        make_xspec_model("tbabs*(diskbb+powerlaw)")
-            
-        return
+        test_args = argparse.Namespace(
+            model="powerlaw",
+            nh=nh,
+            norm1=norm,
+            slope1=slope
+        )
+
+        # old model
+        model_old = make_custom_source_spectrum(wave0, nrg0, test_args)
+
+        # new model
+        model_new = make_xspec_model("tbabs*powerlaw", [nh / 1e22, slope, norm], wave0)
+
+        # # should return same shape
+        # print("old spectrum shape:", model_old.shape)
+        # print("new spectrum shape:", model_new.shape)
+
+        # fractional_difference = ((model_old - model_new) / model_new)
+        # print("max fractional difference:", np.max(np.abs(fractional_difference)))
+
+        rates_old = calculate_stage_count_rates(model_old, dlam0, ea_stages)
+        rates_new = calculate_stage_count_rates(model_new, dlam0, ea_stages)
+
+        r_old = rates_old["detector_qe"]
+        r_new = rates_new["detector_qe"]
+
+        print("Original:", r_old)
+        print("XSPEC:", r_new)
+        print("Count-rate difference:", 100 * (r_old - r_new) / r_new, "%")
 
     if args.mode == "samples":
         print("; Running all source blocks from IDL driver...")
