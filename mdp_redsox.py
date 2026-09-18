@@ -670,6 +670,47 @@ def mdp_redsox(wave, nlam, lam1, lam2, area1_lam_lo, area1_lam_hi, area0_lam, mo
 
     return rate0, rate1, counts, mdp, mdp_band
 
+def inverse_mdp_redsox(wave, nlam, lam1, lam2, area1_lam_lo, area1_lam_hi, modfactor_lo, modfactor_hi, target_mdp, bg):
+    """
+    Calculate exposure time required to reach a target band-limited MDP.
+
+    Inverse of mdp_redsox()
+    """
+
+    wave = np.asarray(wave, dtype=float)
+    nlam = np.asarray(nlam, dtype=float)
+    area1_lam_lo = np.asarray(area1_lam_lo, dtype=float)
+    area1_lam_hi = np.asarray(area1_lam_hi, dtype=float)
+    modfactor_lo = np.asarray(modfactor_lo, dtype=float)
+    modfactor_hi = np.asarray(modfactor_hi, dtype=float)
+
+    oklam = np.where((wave >= lam1) & (wave < lam2))[0]
+
+    # first-order source count-rate spectrum
+    rate1_lam_lo = nlam * area1_lam_lo
+    rate1_lam_hi = nlam * area1_lam_hi
+
+    # total first-order source count rate in selected band
+    rate1 = np.sum(rate1_lam_lo[oklam] + rate1_lam_hi[oklam])
+
+    # modulation factor
+    denom_band = np.sum(
+        modfactor_lo[oklam]**2 * rate1_lam_lo[oklam] +
+        modfactor_hi[oklam]**2 * rate1_lam_hi[oklam]
+    )
+
+    if target_mdp <= 0:
+        raise ValueError("Target MDP must be positive.")
+
+    if rate1 <= 0 or denom_band <= 0:
+        return ValueError("First-order count rate or modulation factor was not positive.")
+
+    bg_factor = math.sqrt(1.0 + bg / rate1)
+
+    exptime = (4.29 * bg_factor / (target_mdp * math.sqrt(denom_band)))**2
+
+    return exptime
+
 def build_effective_areas(data_dir: Path, wave):
     """
     Construct REDSoX effective area and modulation factor arrays.
@@ -1777,13 +1818,27 @@ def main():
                 verbose=False
             )
 
+            inverse_exptime = inverse_mdp_redsox(
+                wave,
+                nlam,
+                lam1,
+                lam2,
+                area1_lam_lo,
+                area1_lam_hi,
+                modfactor_lo,
+                modfactor_hi,
+                mdp_band,
+                bg,
+            )
+
             results[source_name] = {
                 "rate0": rate0,
                 "counts0": counts0,
                 "rate1": rate1,
                 "counts1": counts1,
                 "mdp": mdp,
-                "mdp_band": mdp_band
+                "mdp_band": mdp_band,
+                "inverse_exptime": inverse_exptime
             }
 
             print(f"Zeroth-order rate = {rate0:.6e} count/s")
@@ -1802,6 +1857,7 @@ def main():
             f"{'Rate1 (count/s)':>18}"
             f"{'Counts1':>14}"
             f"{'MDP_band':>12}"
+            f"{'T_inv':>14}"
         )
 
         for source_name, result in results.items():
@@ -1812,6 +1868,7 @@ def main():
                 f"{result['rate1']:>18.6e}"
                 f"{result['counts1']:>14.3f}"
                 f"{result['mdp_band']:>12.4f}"
+                f"{result['inverse_exptime']:>14.6f}"
             )
 
         print("Rate0 calculated from 0.2 to 4.0 keV")
