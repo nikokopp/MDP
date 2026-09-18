@@ -580,7 +580,7 @@ def read_eff_xlsx(fname: str | Path, sheet_name: str = "Sheet1"):
     return wave, theta, eff_by_order
 
 
-def mdp_redsox(wave, nlam, lam1, lam2, area1_lam_lo, area1_lam_hi, area0_lam, modfactor_lo, modfactor_hi, exptime, bg, src_name):
+def mdp_redsox(wave, nlam, lam1, lam2, area1_lam_lo, area1_lam_hi, area0_lam, modfactor_lo, modfactor_hi, exptime, bg, src_name, verbose=True):
     """
     Compute REDSoX count rates and minimum detectable polarization (MDP).
 
@@ -664,8 +664,9 @@ def mdp_redsox(wave, nlam, lam1, lam2, area1_lam_lo, area1_lam_hi, area0_lam, mo
         mdp_const = 4.29 * bg_factor / math.sqrt(exptime)
         mdp_band = mdp_const / math.sqrt(denom_band)
 
-    print(f"; {src_name}, Rate0, rate1, Cnt, MDP_full, MDP_band")
-    print(f"  rate0={rate0:.6e}  rate1={rate1:.6e}  counts={counts:.6e}  mdp={mdp:.6g}  mdp_band={mdp_band:.6g}")
+    if verbose:
+        print(f"; {src_name}, Rate0, rate1, Cnt, MDP_full, MDP_band")
+        print(f"  rate0={rate0:.6e}  rate1={rate1:.6e}  counts={counts:.6e}  mdp={mdp:.6g}  mdp_band={mdp_band:.6g}")
 
     return rate0, rate1, counts, mdp, mdp_band
 
@@ -1226,6 +1227,96 @@ def run_all_sources(wave, nrg, lam1, lam2, area1_lam_lo, area1_lam_hi, area0_lam
 
     return results
 
+def get_xspec_sample_sources():
+    """
+    Sample sources with XSPEC model equivalents!
+    """
+
+    sources = {
+        "RX J1856": {
+            "model": "tbabs*bbodyrad",
+            "pars": [
+                8.0e19 / 1e22,
+                0.06228,
+                bbodyrad_norm_from_radius_distance(
+                    4.95e5,
+                    130.0,
+                ),
+            ],
+        },
+
+        "RX J0720": {
+            "model": "tbabs*bbodyrad",
+            "pars": [
+                0.886e20 / 1e22,
+                0.0924,
+                bbodyrad_norm_from_radius_distance(
+                    4.5e5,
+                    300.0,
+                ),
+            ],
+        },
+
+        "PSR B0656": {
+            "model": "tbabs*(bbodyrad+bbodyrad)",
+            "pars": [
+                0.12e20 / 1e22,
+                0.0679,
+                bbodyrad_norm_from_radius_distance(
+                    9.53e5,
+                    300.0,
+                ),
+                0.170,
+                bbodyrad_norm_from_radius_distance(
+                    0.373e5,
+                    300.0,
+                ),
+            ],
+        },
+
+        "Mrk 421": {
+            "model": "tbabs*powerlaw",
+            "pars": [
+                1.45e20 / 1e22,
+                2.7,
+                0.25,
+            ],
+        },
+
+        "PKS 2155": {
+            "model": "tbabs*powerlaw",
+            "pars": [
+                1.36e20 / 1e22,
+                2.8,
+                0.04,
+            ],
+        },
+
+        "Ark 564": {
+            "model": "tbabs*(powerlaw+powerlaw)",
+            "pars": [
+                5.6e20 / 1e22,
+                2.5,
+                10.0 * 0.001,
+                3.6,
+                3.3 * 0.001,
+            ],
+        },
+
+        "Mrk 478": {
+            "model": "tbabs*(powerlaw+powerlaw)",
+            "pars": [
+                9.8e19 / 1e22,
+                3.03,
+                3.3 * 0.001,
+                1.4,
+                0.28 * 0.001,
+            ],
+        },
+    }
+
+    return sources
+
 def parse_args():
     """
     Parse command-line arguments for REDSoX sensitivity calculations.
@@ -1289,6 +1380,12 @@ def parse_args():
         "testing",
         help="Testing edits."
     )
+
+    # run all benchmark sources using XSPEC! besides 3C 273 and Her X-1 lol
+    subparsers.add_parser(
+        "xspec-samples",
+        help="Run benchmark sources using XSPEC spectral models.",
+    )   
 
 
     custom = subparsers.add_parser(
@@ -1421,6 +1518,9 @@ def make_xspec_model(name, pars, wave):
     numpy.ndarray
         Photon flux density in photons cm^-2 s^-1 Angstrom^-1
     '''
+    xspec.Xset.chatter = 0
+    xspec.Xset.logChatter = 0
+
     # incorrect wavelength grid size or not in increasing order
     if wave.ndim != 1 or wave.size < 2:
         raise ValueError("wavelength grid must be a 1D array with at least two points")
@@ -1456,7 +1556,7 @@ def make_xspec_model(name, pars, wave):
         print("num of parameters:", model.nParameters)
 
         for i in range(1, model.nParameters + 1):
-            print(i, model(i).name, model(i).values)
+            print(f"{i}: {model(i).name} = {model(i).values[0]}")
 
         # get photon flux
         # values(0) gives photon flux integrated over each energy bin
@@ -1471,6 +1571,16 @@ def make_xspec_model(name, pars, wave):
     nlam = bin_flux / dlam # flux density -> flux density/Angstrom
 
     return nlam
+
+def bbodyrad_norm_from_radius_distance(radius_cm, distance_pc):
+    """
+    Convert physical radius and distance to the XSPEC bbodyrad normalization
+    K = (R_km / D_10kpc)^2
+    """
+    radius_km = radius_cm / 1e5
+    distance_10kpc = distance_pc / 1e4
+
+    return (radius_km / distance_10kpc) ** 2
 
 def main():
     """
@@ -1545,29 +1655,57 @@ def main():
         ) = build_zeroth_order_effective_areas(data_dir)
                 
         # make testing args
-        nh = 1.45e20
-        norm = 0.25
-        slope = 2.7
+        nh = 0.12e20
+
+        kT1 = 0.0679
+        kT2 = 0.170
+
+        radius1_cm = 9.53e5
+        radius2_cm = 0.373e5
+        distance_pc = 300.0
+
+        # hard-coded normalization
+        omega1 = (radius1_cm / (distance_pc * CM_PER_PC)) ** 2
+        omega2 = (radius2_cm / (distance_pc * CM_PER_PC)) ** 2
+
+        # xspec bbodyrad normalization
+        bbnorm1 = bbodyrad_norm_from_radius_distance(radius1_cm, distance_pc)
+        bbnorm2 = bbodyrad_norm_from_radius_distance(radius2_cm, distance_pc)
 
         test_args = argparse.Namespace(
-            model="powerlaw",
+            model="bb+bb",
             nh=nh,
-            norm1=norm,
-            slope1=slope
+            kt1=kT1,
+            omega1=omega1,
+            kt2=kT2,
+            omega2=omega2,
         )
 
         # old model
         model_old = make_custom_source_spectrum(wave0, nrg0, test_args)
 
-        # new model
-        model_new = make_xspec_model("tbabs*powerlaw", [nh / 1e22, slope, norm], wave0)
+        # xspec model
+        model_new = make_xspec_model(
+            "tbabs*(bbodyrad+bbodyrad)", 
+            [nh / 1e22, kT1, bbnorm1, kT2, bbnorm2], 
+            wave0)
 
-        # # should return same shape
+        # should return same shape
         # print("old spectrum shape:", model_old.shape)
         # print("new spectrum shape:", model_new.shape)
 
-        # fractional_difference = ((model_old - model_new) / model_new)
-        # print("max fractional difference:", np.max(np.abs(fractional_difference)))
+        fractional_difference = np.full_like(model_new, np.nan)
+
+        valid = (np.isfinite(model_old) & np.isfinite(model_new) & (model_new > 0))
+
+        fractional_difference[valid] = ((model_old[valid] - model_new[valid]) / model_new[valid])
+        i_max = np.nanargmax(np.abs(fractional_difference))
+
+        print("max fractional difference:", fractional_difference[i_max])
+        # print("at wavelength:", wave0[i_max], "Angstrom")
+        # print("at energy:", nrg0[i_max], "keV")
+        # print("old flux:", model_old[i_max])
+        # print("XSPEC flux:", model_new[i_max])
 
         rates_old = calculate_stage_count_rates(model_old, dlam0, ea_stages)
         rates_new = calculate_stage_count_rates(model_new, dlam0, ea_stages)
@@ -1578,6 +1716,107 @@ def main():
         print("Original:", r_old)
         print("XSPEC:", r_new)
         print("Count-rate difference:", 100 * (r_old - r_new) / r_new, "%")
+        return
+
+    if args.mode == "xspec-samples":
+        print("; Running XSPEC sample source library! :)")
+        print("; Note that 3C 273 and Her X-1 are not currently included.")
+
+        (
+            wave0,
+            nrg0,
+            area0_lam0,
+            dlam0,
+            ea_stages,
+            detqe_filt0,
+            selected_theta
+        ) = build_zeroth_order_effective_areas(data_dir)
+
+        sources = get_xspec_sample_sources()
+
+        results = {}
+
+        for source_name, source in sources.items():
+            print()
+            print("=" * 30)
+            print(source_name)
+            print("=" * 30)
+
+            xspec_model = source["model"]
+            pars = source["pars"]
+
+            # zeroth-order spectrum on wave0
+
+            nlam0 = make_xspec_model(xspec_model, pars, wave0)
+            stage_rates = calculate_stage_count_rates(nlam0, dlam0, ea_stages)
+            rate0 = stage_rates["detector_qe"]
+            counts0 = rate0 * exptime
+
+            # first-order spectrum on normal redsox grid
+            nlam = make_xspec_model(xspec_model, pars, wave)
+
+            (
+                old_rate0,
+                rate1,
+                counts1,
+                mdp,
+                mdp_band,
+            ) = mdp_redsox(
+                wave,
+                nlam,
+                lam1,
+                lam2,
+                area1_lam_lo,
+                area1_lam_hi,
+                area0_lam,
+                modfactor_lo,
+                modfactor_hi,
+                exptime,
+                bg,
+                source_name,
+                verbose=False
+            )
+
+            results[source_name] = {
+                "rate0": rate0,
+                "counts0": counts0,
+                "rate1": rate1,
+                "counts1": counts1,
+                "mdp": mdp,
+                "mdp_band": mdp_band
+            }
+
+            print(f"Zeroth-order rate = {rate0:.6e} count/s")
+            print(f"First-order rate = {rate1:.6e} count/s")
+
+        # final summary
+        print()
+        print("=" * 100)
+        print("XSPEC SOURCE SUMMARY")
+        print("=" * 100)
+
+        print(
+            f"{'Source':<15}"
+            f"{'Rate0 (count/s)':>18}"
+            f"{'Counts0':>14}"
+            f"{'Rate1 (count/s)':>18}"
+            f"{'Counts1':>14}"
+            f"{'MDP_band':>12}"
+        )
+
+        for source_name, result in results.items():
+            print(
+                f"{source_name:<15}"
+                f"{result['rate0']:>18.6e}"
+                f"{result['counts0']:>14.3f}"
+                f"{result['rate1']:>18.6e}"
+                f"{result['counts1']:>14.3f}"
+                f"{result['mdp_band']:>12.4f}"
+            )
+
+        print("Rate0 calculated from 0.2 to 4.0 keV")
+        print("Rate1 and MDP_band calculated from 0.2 to 0.4 keV.")
+        print(f"Counts totalled over {exptime} seconds.")
 
     if args.mode == "samples":
         print("; Running all source blocks from IDL driver...")
